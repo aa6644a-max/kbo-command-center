@@ -1,0 +1,40 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx create-next-app@latest frontend --typescript --tailwind --eslint --app --no-src-dir --import-alias \"@/*\" --yes)",
+      "Bash(python -m venv venv)",
+      "Bash(py --version)",
+      "Bash(where python *)",
+      "Bash(where python3 *)",
+      "Bash(ls /c/Python*)",
+      "Read(//c/Users/shock/AppData/Local/Programs/**)",
+      "Bash(/c/Users/shock/AppData/Local/Microsoft/WindowsApps/python.exe *)",
+      "Bash(pip --version)",
+      "Bash(pip3 --version)",
+      "Bash(conda --version)",
+      "Bash(cmd.exe /c \"python --version\")",
+      "Bash(cmd.exe /c \"py --version\")",
+      "Bash(powershell.exe *)",
+      "Bash(npm run *)",
+      "Bash(venv/Scripts/pip install *)",
+      "Bash(venv/Scripts/python -c \"import main; print\\('OK'\\)\")",
+      "Bash(cmd.exe *)",
+      "Bash(venv/Scripts/uvicorn main:app --reload --port 8000)",
+      "Bash(venv/Scripts/python -c \"import main; print\\('main OK'\\)\")",
+      "Bash(venv/Scripts/python -c \"from crawler.kbo_scraper import scrape_today_games, save_to_redis; print\\('crawler OK'\\)\")",
+      "Bash(venv/Scripts/python -c \"from crawler.kbo_scraper import run, fetch_game_list, fetch_scoreboard, fetch_boxscore, build_game_record, save_games; print\\('OK'\\)\")",
+      "Bash(venv/Scripts/python -m crawler.kbo_scraper)",
+      "Bash(venv/Scripts/python -c \"import redis; r = redis.from_url\\('redis://localhost:6379'\\); print\\(r.ping\\(\\)\\)\")",
+      "Bash(venv/Scripts/python -c ' *)",
+      "Bash(venv/Scripts/python -c \"from crawler.kbo_scraper import run, build_game_record, _g_id_to_int; print\\('import OK'\\)\")",
+      "Bash(venv/Scripts/uvicorn main:app --port 8000)",
+      "Bash(venv/Scripts/uvicorn main:app --port 8001)",
+      "Bash(npx tsc *)",
+      "Bash(grep -qE \"Redis 저장|오류\" \"C:/Users/shock/AppData/Local/Temp/claude/C--Users-shock-Desktop-MK-AI-kbo-command-center/35e5504d-2269-47ab-bee8-79d8a52ca16c/tasks/bdpsvzwv7.output\")",
+      "Bash(npm install *)",
+      "Bash(rm -rf \"C:/Users/shock/Desktop/MK AI/kbo-command-center/frontend/.git\")",
+      "Bash(git rm *)",
+      "Bash(git add *)"
+    ]
+  }
+}
