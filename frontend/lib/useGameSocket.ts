@@ -3,7 +3,7 @@ import { LiveGame } from './types';
 
 type Handler = (game: LiveGame) => void;
 
-const WS_URL = process.env.NEXT_PUBLIC_WS_URL ?? 'ws://localhost:8001/ws';
+const WS_URL = process.env.NEXT_PUBLIC_WS_URL ?? 'ws://127.0.0.1:8001/ws';
 
 export function useGameSocket(onUpdate: Handler) {
   const wsRef = useRef<WebSocket | null>(null);
