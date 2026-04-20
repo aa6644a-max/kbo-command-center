@@ -34,7 +34,11 @@
       "Bash(npm install *)",
       "Bash(rm -rf \"C:/Users/shock/Desktop/MK AI/kbo-command-center/frontend/.git\")",
       "Bash(git rm *)",
-      "Bash(git add *)"
+      "Bash(git add *)",
+      "Bash(git config *)",
+      "Bash(git commit -m ' *)",
+      "Bash(curl -s http://localhost:8001/health)",
+      "Bash(curl -s http://localhost:3000)"
     ]
   }
 }
