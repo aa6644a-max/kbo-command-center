@@ -60,6 +60,12 @@ export default function Home() {
             <>
               <span className="text-red-500 text-lg font-bold">⚠ 백엔드 연결 실패</span>
               <p className="text-sm">서버가 실행 중인지 확인하세요 (port 8001)</p>
+              <button
+                onClick={() => window.location.reload()}
+                className="mt-2 px-4 py-1.5 text-sm bg-[#1e3a6e] text-white rounded hover:opacity-80"
+              >
+                재시도
+              </button>
             </>
           ) : (
             <>

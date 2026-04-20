@@ -3,31 +3,43 @@ import { LiveGame } from './types';
 
 type Handler = (game: LiveGame) => void;
 
+const WS_URL = process.env.NEXT_PUBLIC_WS_URL ?? 'ws://localhost:8001/ws';
+
 export function useGameSocket(onUpdate: Handler) {
   const wsRef = useRef<WebSocket | null>(null);
   const handlerRef = useRef(onUpdate);
+  const mountedRef = useRef(true);
   handlerRef.current = onUpdate;
 
   const connect = useCallback(() => {
-    const ws = new WebSocket(process.env.NEXT_PUBLIC_WS_URL!);
+    if (!mountedRef.current) return;
+
+    const ws = new WebSocket(WS_URL);
 
     ws.onmessage = (e) => {
-      const data = JSON.parse(e.data) as { type: string; payload: LiveGame };
-      if (data.type === 'GAME_UPDATE') {
-        handlerRef.current(data.payload);
-      }
+      try {
+        const data = JSON.parse(e.data) as { type: string; payload: LiveGame };
+        if (data.type === 'GAME_UPDATE') {
+          handlerRef.current(data.payload);
+        }
+      } catch { /* ignore malformed messages */ }
     };
 
+    ws.onerror = () => ws.close();
+
     ws.onclose = () => {
-      // 3초 후 재연결
-      setTimeout(connect, 3000);
+      if (mountedRef.current) setTimeout(connect, 3000);
     };
 
     wsRef.current = ws;
   }, []);
 
   useEffect(() => {
+    mountedRef.current = true;
     connect();
-    return () => wsRef.current?.close();
+    return () => {
+      mountedRef.current = false;
+      wsRef.current?.close();
+    };
   }, [connect]);
 }
