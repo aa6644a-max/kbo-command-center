@@ -37,6 +37,7 @@ BASE = "https://www.koreabaseball.com"
 GAME_LIST_URL  = f"{BASE}/ws/Main.asmx/GetKboGameList"
 SCOREBOARD_URL = f"{BASE}/ws/Schedule.asmx/GetScoreBoardScroll"
 BOXSCORE_URL   = f"{BASE}/ws/Schedule.asmx/GetBoxScoreScroll"
+STANDING_URL   = f"{BASE}/ws/Main.asmx/GetKboStandingList"
 
 BASE_HEADERS = {
     "User-Agent": (
@@ -633,6 +634,85 @@ async def run_daily_batch(r: aioredis.Redis) -> list[dict]:
     await pipe.execute()
     logger.info(f"[배치] {len(prediction_games)}경기 저장 완료 (game:{{date}}:{{gId}})")
     return prediction_games
+
+
+# ── 순위 크롤러 ──────────────────────────────────────────────────────────────
+
+def api_get_standings(session: requests.Session) -> list[dict]:
+    resp = session.post(
+        STANDING_URL,
+        data={"leId": "1", "srId": "0"},
+        timeout=15,
+    )
+    resp.raise_for_status()
+    data = resp.json()
+    # 응답이 {"list": [...]} 또는 직접 배열
+    if isinstance(data, list):
+        return data
+    return data.get("list", data.get("game", []))
+
+
+def _parse_standing_item(item: dict | list, rank: int) -> dict | None:
+    """KBO 순위 항목 파싱 (dict 또는 HTML 셀 리스트 모두 처리)"""
+    try:
+        if isinstance(item, list):
+            # HTML 테이블 행 파싱
+            cells = [BeautifulSoup(str(c), "lxml").get_text(strip=True) for c in item]
+            if len(cells) < 7:
+                return None
+            return {
+                "rank":     rank,
+                "team":     cells[1] if len(cells) > 1 else "",
+                "games":    _safe_int(cells[2]),
+                "wins":     _safe_int(cells[3]),
+                "losses":   _safe_int(cells[4]),
+                "draws":    _safe_int(cells[5]),
+                "win_pct":  _safe_float(cells[6]),
+                "gb":       cells[7] if len(cells) > 7 else "-",
+                "recent10": cells[8] if len(cells) > 8 else "",
+                "streak":   cells[9] if len(cells) > 9 else "",
+            }
+        else:
+            # JSON 객체 파싱
+            team_id = item.get("TEAM_ID", item.get("teamId", ""))
+            team_nm = item.get("TEAM_NM", item.get("teamName", ""))
+            team    = TEAM_ID_MAP.get(team_id, team_nm)
+            return {
+                "rank":     _safe_int(item.get("RANK", item.get("rank", rank))),
+                "team":     team,
+                "games":    _safe_int(item.get("GAME_CN", item.get("games", 0))),
+                "wins":     _safe_int(item.get("W_CN",    item.get("wins", 0))),
+                "losses":   _safe_int(item.get("L_CN",    item.get("losses", 0))),
+                "draws":    _safe_int(item.get("D_CN",    item.get("draws", 0))),
+                "win_pct":  _safe_float(item.get("W_RATE", item.get("win_pct", 0.0))),
+                "gb":       str(item.get("GAME_DIFF", item.get("gb", "-"))),
+                "recent10": item.get("RECENT10", item.get("recent10", "")),
+                "streak":   item.get("STREAK", item.get("streak", "")),
+            }
+    except Exception:
+        return None
+
+
+async def fetch_standings() -> list[dict]:
+    """KBO 팀 순위 반환 (Redis 우선, 실패 시 크롤링)"""
+    loop = asyncio.get_running_loop()
+    session = _make_session()
+    try:
+        raw_list = await loop.run_in_executor(
+            None, partial(api_get_standings, session)
+        )
+        result = []
+        for i, item in enumerate(raw_list, 1):
+            parsed = _parse_standing_item(item, i)
+            if parsed and parsed.get("team"):
+                result.append(parsed)
+        if result:
+            result.sort(key=lambda x: x["rank"])
+            logger.info(f"순위 조회 완료: {len(result)}팀")
+            return result
+    except Exception as e:
+        logger.warning(f"순위 조회 실패: {e}")
+    return []
 
 
 # ── 실시간 메인 루프 ─────────────────────────────────────────────────────────

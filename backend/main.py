@@ -13,8 +13,8 @@ import redis.asyncio as aioredis
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 
-from scheduler import setup_scheduler, get_scheduler
-from crawler.kbo_scraper import run as run_crawler
+from scheduler import setup_scheduler, get_scheduler, run_prediction_pipeline
+from crawler.kbo_scraper import run as run_crawler, fetch_standings
 
 logger = logging.getLogger("uvicorn.error")
 
@@ -251,6 +251,33 @@ async def get_predictions(date: str):
             except json.JSONDecodeError:
                 pass
     return games
+
+
+@app.get("/standings")
+async def get_standings():
+    """팀 순위 반환 (Redis 캐시 1시간)"""
+    r = await get_redis()
+    if r:
+        cached = await r.get("standings:latest")
+        if cached:
+            try:
+                return json.loads(cached)
+            except json.JSONDecodeError:
+                pass
+
+    standings = await fetch_standings()
+
+    if r and standings:
+        await r.set("standings:latest", json.dumps(standings, ensure_ascii=False), ex=3600)
+
+    return standings
+
+
+@app.post("/pipeline/run")
+async def trigger_pipeline():
+    """예측 파이프라인 수동 실행"""
+    asyncio.create_task(run_prediction_pipeline())
+    return {"status": "started"}
 
 
 @app.get("/health")

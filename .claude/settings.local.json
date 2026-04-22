@@ -38,7 +38,18 @@
       "Bash(git config *)",
       "Bash(git commit -m ' *)",
       "Bash(curl -s http://localhost:8001/health)",
-      "Bash(curl -s http://localhost:3000)"
+      "Bash(curl -s http://localhost:3000)",
+      "Bash(git push *)",
+      "Bash(xargs ls *)",
+      "Bash(netstat -ano)",
+      "Bash(tasklist)",
+      "Bash(curl -s http://127.0.0.1:8001/health)",
+      "Bash(curl -s http://127.0.0.1:3000)",
+      "Bash(start *)",
+      "Bash(taskkill /F /IM uvicorn.exe)",
+      "Bash(taskkill /F /PID 14924)",
+      "Bash(taskkill /F /IM python.exe)",
+      "Bash(taskkill /F /IM node.exe)"
     ]
   }
 }

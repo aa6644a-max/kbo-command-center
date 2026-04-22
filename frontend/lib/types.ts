@@ -105,6 +105,21 @@ export const TEAM_ABBR: Record<string, string> = {
   '한화': 'HH', '키움': 'WO',
 };
 
+// ── 팀 순위 타입 ────────────────────────────────────────────────────────────
+
+export interface TeamStanding {
+  rank: number;
+  team: string;
+  games: number;
+  wins: number;
+  losses: number;
+  draws: number;
+  win_pct: number;
+  gb: string;
+  recent10: string;
+  streak: string;
+}
+
 // ── 예측 전용 타입 ──────────────────────────────────────────────────────────
 
 export interface WpFactor {
