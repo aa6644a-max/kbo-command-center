@@ -10,8 +10,7 @@ export async function GET(
 
   try {
     const res = await fetch(`${BACKEND}/predictions/${date}`, {
-      // 서버 캐시: 5분
-      next: { revalidate: 300 },
+      cache: 'no-store',
     });
 
     if (!res.ok) {
