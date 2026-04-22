@@ -13,8 +13,12 @@ import redis.asyncio as aioredis
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 
+import re
+from datetime import datetime
+
 from scheduler import setup_scheduler, get_scheduler, run_prediction_pipeline
 from crawler.kbo_scraper import run as run_crawler, fetch_standings
+from predictor.wp_calculator import calculate_wp
 
 logger = logging.getLogger("uvicorn.error")
 
@@ -237,10 +241,11 @@ async def get_games():
 
 @app.get("/predictions/{date}")
 async def get_predictions(date: str):
-    """game:{date}:* 키에서 예측 데이터 반환"""
+    """game:{date}:* 키에서 예측 반환 — 없으면 실시간 데이터로 폴백"""
     r = await get_redis()
     if not r:
         return []
+
     keys = [k async for k in r.scan_iter(f"game:{date}:*")]
     games = []
     for key in keys:
@@ -250,25 +255,133 @@ async def get_predictions(date: str):
                 games.append(json.loads(raw))
             except json.JSONDecodeError:
                 pass
+
+    # 배치 데이터 없으면 실시간 폴백
+    if not games:
+        today = datetime.now().strftime("%Y%m%d")
+        if date == today:
+            games = await _get_today_predictions(r, date)
+
+    return games
+
+
+def _parse_record(record_str: str) -> tuple[int, int]:
+    """'10승 9패' → (10, 9)"""
+    m = re.match(r'(\d+)\S*\s*(\d+)', record_str or '')
+    if m:
+        return int(m.group(1)), int(m.group(2))
+    return 0, 0
+
+
+async def _derive_standings(r: aioredis.Redis) -> list[dict]:
+    """실시간 게임 데이터의 시즌 전적으로 순위 계산"""
+    team_data: dict[str, tuple[int, int]] = {}
+    async for key in r.scan_iter("game:*"):
+        if key.count(":") != 1:
+            continue
+        raw = await r.get(key)
+        if not raw:
+            continue
+        try:
+            game = json.loads(raw)
+            for team_field, record_field in [("home", "homeRecord"), ("away", "awayRecord")]:
+                team = game.get(team_field, "")
+                rec = game.get(record_field, "")
+                if not team or not rec:
+                    continue
+                w, l = _parse_record(rec)
+                if w + l > 0:
+                    existing = team_data.get(team, (0, 0))
+                    if w + l >= existing[0] + existing[1]:
+                        team_data[team] = (w, l)
+        except Exception:
+            continue
+
+    result = []
+    for team, (w, l) in sorted(
+        team_data.items(),
+        key=lambda x: x[1][0] / (x[1][0] + x[1][1]) if x[1][0] + x[1][1] > 0 else 0,
+        reverse=True,
+    ):
+        games = w + l
+        win_pct = round(w / games, 4) if games > 0 else 0.0
+        result.append({
+            "rank":     len(result) + 1,
+            "team":     team,
+            "games":    games,
+            "wins":     w,
+            "losses":   l,
+            "draws":    0,
+            "win_pct":  win_pct,
+            "gb":       "-",
+            "recent10": "",
+            "streak":   "",
+        })
+
+    # GB 계산 (1위 기준)
+    if result:
+        top_w, top_l = result[0]["wins"], result[0]["losses"]
+        for t in result[1:]:
+            gb = ((top_w - t["wins"]) + (t["losses"] - top_l)) / 2
+            t["gb"] = f"{gb:.1f}" if gb > 0 else "-"
+
+    return result
+
+
+async def _get_today_predictions(r: aioredis.Redis, date: str) -> list[dict]:
+    """배치 예측 없을 때 실시간 데이터 + WP 계산으로 폴백 (오늘 경기만)"""
+    games = []
+    async for key in r.scan_iter("game:*"):
+        if key.count(":") != 1:
+            continue
+        raw = await r.get(key)
+        if not raw:
+            continue
+        try:
+            game = json.loads(raw)
+            # gId 앞 8자리가 오늘 날짜인 것만 포함
+            g_id = game.get("gId", "")
+            if g_id and not g_id.startswith(date):
+                continue
+            wp = calculate_wp(game)
+            game.update({
+                "away_win_pct": wp["away_win_pct"],
+                "home_win_pct": wp["home_win_pct"],
+                "wp_factors":   wp["factors"],
+                "ai_comment":   "",
+                "date":         date,
+                "away_era":     game.get("away_era") or 0.0,
+                "home_era":     game.get("home_era") or 0.0,
+                "away_recent_wins": game.get("away_recent_wins") or 5,
+                "home_recent_wins": game.get("home_recent_wins") or 5,
+                "h2h_summary":  game.get("h2h_summary") or "기록 없음",
+            })
+            games.append(game)
+        except Exception:
+            continue
     return games
 
 
 @app.get("/standings")
 async def get_standings():
-    """팀 순위 반환 (Redis 캐시 1시간)"""
+    """팀 순위: Redis 캐시 → 실시간 데이터 파생"""
     r = await get_redis()
-    if r:
-        cached = await r.get("standings:latest")
-        if cached:
-            try:
-                return json.loads(cached)
-            except json.JSONDecodeError:
-                pass
+    if not r:
+        return []
 
-    standings = await fetch_standings()
+    cached = await r.get("standings:latest")
+    if cached:
+        try:
+            data = json.loads(cached)
+            if data:
+                return data
+        except json.JSONDecodeError:
+            pass
 
-    if r and standings:
-        await r.set("standings:latest", json.dumps(standings, ensure_ascii=False), ex=3600)
+    standings = await _derive_standings(r)
+
+    if standings:
+        await r.set("standings:latest", json.dumps(standings, ensure_ascii=False), ex=1800)
 
     return standings
 
